@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 import "dotenv/config";
 
 const PORT = process.env.PORT || 5000;
@@ -42,11 +42,26 @@ app.get("/users", async (req, res) => {
 
 // equipments related apis:
 app.post("/equipments", async (req, res) => {
-  const data = req.body;
+  const data = {
+    ...req.body,
+    dateEquipment: new Date().toISOString(),
+  };
   const result = await equipmentsCollection.insertOne(data);
   res.send(result);
-  console.log(result, "the post equipment is...");
+//   console.log(result, "the post equipment is...");
 });
+app.get('/equipments/:email', async(req, res) => {
+    const email = req.params.email;
+    const query = {ownerEmail:email};
+    const result = await equipmentsCollection.find(query).toArray();
+    res.send(result);
+    // console.log(result, 'specefiq owner all equepments')
+})
+app.get('/equipments', async(req, res) => {
+    const result = await equipmentsCollection.find().toArray();
+    res.send(result);
+    console.log(result, 'all equepments')
+})
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
