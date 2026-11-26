@@ -48,20 +48,70 @@ app.post("/equipments", async (req, res) => {
   };
   const result = await equipmentsCollection.insertOne(data);
   res.send(result);
-//   console.log(result, "the post equipment is...");
+  //   console.log(result, "the post equipment is...");
 });
-app.get('/equipments/:email', async(req, res) => {
-    const email = req.params.email;
-    const query = {ownerEmail:email};
-    const result = await equipmentsCollection.find(query).toArray();
-    res.send(result);
-    // console.log(result, 'specefiq owner all equepments')
-})
-app.get('/equipments', async(req, res) => {
-    const result = await equipmentsCollection.find().toArray();
-    res.send(result);
-    console.log(result, 'all equepments')
-})
+app.get("/equipments/:email", async (req, res) => {
+  const email = req.params.email;
+  const query = { ownerEmail: email };
+  const result = await equipmentsCollection.find(query).toArray();
+  res.send(result);
+  // console.log(result, 'specefiq owner all equepments')
+});
+app.get("/equipments", async (req, res) => {
+  const query = {};
+
+  if (req.query) {
+    if (req.query.name) {
+      query.name = req.query.name;
+    }
+    if (req.query.rentalType) {
+      query.rentalType = req.query.rentalType;
+    }
+    if (req.query.category && req.query.category !== "All Categories") {
+      query.category = req.query.category;
+    }
+    if (req.query.minPrice || req.query.maxPrice) {
+      query.price = {};
+
+      if (req.query.minPrice) {
+        query.price.$gte = Number(req.query.minPrice);
+      }
+
+      if (req.query.maxPrice) {
+        query.price.$lte = Number(req.query.maxPrice);
+      }
+    }
+    if (req.query.availability === "available") {
+      query.quantity = { $gt: 0 };
+    }
+
+    if (req.query.availability === "unavailable") {
+      query.quantity = { $lte: 0 };
+    }
+    if (req.query.search) {
+      query.$or = [
+        { name: { $regex: req.query.search, $options: "i" } },
+        { location: { $regex: req.query.search, $options: "i" } },
+      ];
+    }
+  }
+  let sortOption = {};
+
+  if (req.query.sort === "price-asc") {
+    sortOption = { price: 1 };
+  } else if (req.query.sort === "price-desc") {
+    sortOption = { price: -1 };
+  } else if (req.query.sort === "recent") {
+    sortOption = { _id: -1 };
+  }
+
+  const result = await equipmentsCollection
+    .find(query)
+    .sort(sortOption)
+    .toArray();
+  res.send(result);
+  // console.log(result, 'all equepments')
+});
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
