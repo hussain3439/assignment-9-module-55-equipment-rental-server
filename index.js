@@ -28,6 +28,7 @@ const database = connectClient.db("equipmentDB");
 
 const usersCollection = database.collection("user");
 const equipmentsCollection = database.collection("equipments");
+const bookingsCollection = database.collection("bookings");
 
 app.get("/", async (req, res) => {
   res.send({ msg: "The equipment is fine!" });
@@ -50,10 +51,13 @@ app.post("/equipments", async (req, res) => {
   res.send(result);
   //   console.log(result, "the post equipment is...");
 });
-app.get("/equipments/:email", async (req, res) => {
+app.get("/equipments/owner/:email", async (req, res) => {
   const email = req.params.email;
   const query = { ownerEmail: email };
-  const result = await equipmentsCollection.find(query).toArray();
+  const result = await equipmentsCollection
+    .find(query)
+    .sort({ dateEquipment: -1 })
+    .toArray();
   res.send(result);
   // console.log(result, 'specefiq owner all equepments')
 });
@@ -95,7 +99,7 @@ app.get("/equipments", async (req, res) => {
       ];
     }
   }
-  let sortOption = {};
+  let sortOption = { dateEquipment: -1 };
 
   if (req.query.sort === "price-asc") {
     sortOption = { price: 1 };
@@ -111,6 +115,164 @@ app.get("/equipments", async (req, res) => {
     .toArray();
   res.send(result);
   // console.log(result, 'all equepments')
+});
+app.get("/featured-equipments", async (req, res) => {
+  const result = await equipmentsCollection
+    .find()
+    .sort({ dateEquipment: -1 })
+    .limit(6)
+    .toArray();
+  res.send(result);
+});
+app.get("/category-equipments", async (req, res) => {
+  const result = await equipmentsCollection.distinct("category");
+  res.send(result);
+});
+app.get("/equipments/:id", async (req, res) => {
+  const id = req.params.id;
+  const query = { _id: new ObjectId(id) };
+  const result = await equipmentsCollection.findOne(query);
+  console.log(result);
+  res.send(result);
+});
+
+// bookings related apis:
+// app.post("/bookings", async (req, res) => {
+//   const bookingData = req.body;
+//   const result = await bookingsCollection.insertOne({
+//     ...bookingData,
+//     bookingStatus: "pending",
+//     paymentStatus: "unpaid",
+//     createdAt: new Date(),
+//   });
+//   console.log(result, "the booking data is");
+//   res.send(result);
+// });
+
+app.post("/bookings", async (req, res) => {
+  const {
+    equipmentId,
+    customerId,
+    customerName,
+    customerEmail,
+    startDate,
+    endDate,
+    quantity,
+    contactPhone,
+    deliveryAddress,
+    specialInstructions,
+  } = req.body;
+
+  // Check required fields
+  if (
+    !equipmentId ||
+    !customerId ||
+    !startDate ||
+    !endDate ||
+    !quantity ||
+    !contactPhone ||
+    !deliveryAddress
+  ) {
+    return res.status(400).send({
+      success: false,
+      message: "Please provide all required information",
+    });
+  }
+
+  // Find equipment
+  const equipment = await equipmentsCollection.findOne({
+    _id: new ObjectId(equipmentId),
+  });
+
+  if (!equipment) {
+    return res.status(404).send({
+      success: false,
+      message: "Equipment not found",
+    });
+  }
+
+  // Validate quantity
+  const requestedQuantity = Number(quantity);
+
+  if (
+    !Number.isInteger(requestedQuantity) ||
+    requestedQuantity < 1 ||
+    requestedQuantity > equipment.quantity
+  ) {
+    return res.status(400).send({
+      success: false,
+      message: "Invalid equipment quantity",
+    });
+  }
+
+  // Validate dates
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+
+  if (
+    Number.isNaN(start.getTime()) ||
+    Number.isNaN(end.getTime()) ||
+    end <= start
+  ) {
+    return res.status(400).send({
+      success: false,
+      message: "Please select valid dates",
+    });
+  }
+
+  // Calculate rental days
+  const rentalDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+
+  // Calculate rental units
+  const periodDays =
+    equipment.rentalType === "daily"
+      ? 1
+      : equipment.rentalType === "weekly"
+        ? 7
+        : 30;
+
+  const rentalUnits = Math.ceil(rentalDays / periodDays);
+
+  // Calculate total amount
+  const totalAmount = equipment.price * rentalUnits * requestedQuantity;
+
+  // Prepare booking data
+  const bookingData = {
+    equipmentId: equipment._id.toString(),
+    equipmentName: equipment.name,
+    ownerId: equipment.ownerId,
+
+    customerId,
+    customerName,
+    customerEmail,
+
+    startDate,
+    endDate,
+    rentalDays,
+    rentalUnits,
+    quantity: requestedQuantity,
+
+    price: equipment.price,
+    rentalType: equipment.rentalType,
+    totalAmount,
+
+    contactPhone,
+    deliveryAddress,
+    specialInstructions: specialInstructions || "",
+
+    bookingStatus: "pending",
+    paymentStatus: "unpaid",
+    createdAt: new Date(),
+  };
+
+  // Save booking
+  const result = await bookingsCollection.insertOne(bookingData);
+
+  res.status(201).send({
+    success: true,
+    message: "Booking created successfully",
+    bookingId: result.insertedId,
+  });
 });
 
 app.listen(PORT, () => {
